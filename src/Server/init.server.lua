@@ -3,12 +3,22 @@ local startTime = os.clock()
 local ReplicatedStorage = game:GetService( "ReplicatedStorage" )
 --
 local Knit = require( ReplicatedStorage.Packages.Knit )
+local Import = require( ReplicatedStorage.Packages.Import )
 
 -- EXPOSE ASSET FOLDERS
 Knit.Assets = ReplicatedStorage.Assets
 
 -- EXPOSE SERVER MODULES
 Knit.Modules = script.Modules
+
+-- IMPORT ALIASES
+Import.setAliases({
+	Packages = ReplicatedStorage.Packages,
+	Shared = ReplicatedStorage.Shared,
+	Assets = ReplicatedStorage.Assets,
+	Functions = script.Functions,
+	Modules = script.Modules,
+})
 
 --EXPOSE SHARED MODULES
 Knit.SharedModules = ReplicatedStorage.Shared.Modules

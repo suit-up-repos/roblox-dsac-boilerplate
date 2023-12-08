@@ -4,29 +4,41 @@
 
 Author: ArtemisTheDeer
 Date: 11/14/2023
-Project: Sparkles
+Project: DSAC-Boilerplate
 
 Description: Player data Knit controller
 ]=]
 
+---------------------------------------------------------------------
+
 --GetService calls
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ReplicatedStorage: ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService: HttpService = game:GetService("HttpService")
 
 --Types
 local Types = require(ReplicatedStorage.Shared.Modules.Data.Types)
 type ANY_TABLE = Types.ANY_TABLE
 type REPLICA = Types.Replica
 
+-- Import
+local Import = require(ReplicatedStorage.Packages.Import)
+
 --Module imports (Require)
 local Knit: ANY_TABLE = require(ReplicatedStorage.Packages.Knit)
 local Promise: ANY_TABLE = require(ReplicatedStorage.Packages.Promise)
 local Signal: ANY_TABLE = require(ReplicatedStorage.Packages.Signal)
-local ReplicaController: ANY_TABLE
+--local ReplicaController: ANY_TABLE
+local ReplicaController: ANY_TABLE = Import("Shared/Resources/ReplicaController")
+local WriteLib = Import("Shared/Functions/WriteLib")
+local cachedPlayerdata: ANY_TABLE
+
+---------------------------------------------------------------------
 
 local DataController: ANY_TABLE = Knit.CreateController({
 	Name = "DataController",
 	_loadedPlayerdata = Signal.new(),
 	_dataUpdatedSignals = {},
+	cachedPlayerdata = nil,
 })
 
 --[=[
@@ -36,7 +48,6 @@ local DataController: ANY_TABLE = Knit.CreateController({
 ]=]
 local DATA_LOAD_TIMEOUT: number = 10
 
-local cachedPlayerdata: ANY_TABLE
 
 --[=[
     Returns a promise that resolves with the playerdata once successfully loaded for the first time, and rejects if the player's data cannot be retrieved for some reason
@@ -118,17 +129,19 @@ end
 
 --[=[
 	Initialize DataController
-	Get the replica of the playerdata from the server, and then set the cachedPlayerdata varaible as the replica
+	Get the replica of the playerdata from the server, and then set the cachedPlayerdata variable as the replica
 	@return nil
 ]=]
 function DataController:KnitInit(): nil
+	local store = Knit.Store
 	ReplicaController = Knit.GetController("ReplicaController")
-
+		
 	ReplicaController:replicaOfClassCreated("Playerdata", function(playerdataReplica: REPLICA)
 		cachedPlayerdata = playerdataReplica
 		self._loadedPlayerdata:Fire(playerdataReplica.Data)
 	end)
-
+	
+	ReplicaController.RequestData()
 	return
 end
 

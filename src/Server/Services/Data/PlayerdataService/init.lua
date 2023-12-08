@@ -11,8 +11,8 @@ Description: Rewrite of serverOptimist PlayerdataService module
 ]=]
 
 --GetService calls
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
+local ReplicatedStorage: ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService: RunService = game:GetService("RunService")
 
 --Lua types
 local Types = require(ReplicatedStorage.Shared.Modules.Data.Types)
@@ -26,10 +26,23 @@ local Promise: ANY_TABLE = require(PACKAGES.Promise)
 local ProfileService: ANY_TABLE = require(script.ProfileService)
 local ReplicaService: ANY_TABLE
 
+-- Imports
+local Import = require(ReplicatedStorage.Packages.Import)
+
+local t: ANY_TABLE = Import("Packages/t")
+local Knit: ANY_TABLE = Import("Packages/Knit")
+local Signal: ANY_TABLE = Import("Packages/Signal")
+local Promise: ANY_TABLE = Import("Packages/Promise")
+local ProfileService: ANY_TABLE = Import("ProfileService")
+local InventoryHelper = Import("Shared/Helpers/InventoryHelper")
+
 local PlayerdataService: ANY_TABLE = Knit.CreateService({
 	Name = "PlayerdataService",
 	Client = {},
 	_playerdata = {},
+	-- Public signals
+	PlayerdataLoaded = Signal.new(),
+	-- Private signals
 	_playerdataLoaded = Signal.new(),
 	_playerdataUnloaded = Signal.new(),
 })
@@ -168,6 +181,7 @@ function PlayerdataService:_createPlayerdataProfile(Player: Player): ANY_TABLE
 			:catch(Reject)
 	end):andThen(function()
 		self._playerdataLoaded:Fire(Player)
+		self.PlayerdataLoaded:Fire(Player)
 	end)
 end
 
@@ -177,7 +191,7 @@ end
 	@server
 	@return Promise<T> -- A promise that resolves with a table of the player's data if the playerdata exists, and rejects if the playerdata does not exist
 ]=]
-function PlayerdataService:GetPlayerdata(Player: Player): ANY_TABLE
+function PlayerdataService:PromisePlayerdata(Player: Player): ANY_TABLE
 	return Promise.new(function(Resolve, Reject)
 		if self._playerdata[Player] and self._playerdata[Player]._profile then
 			return Resolve(self._playerdata[Player]._profile.Data)
@@ -203,6 +217,133 @@ function PlayerdataService:GetPlayerdata(Player: Player): ANY_TABLE
 	end)
 end
 
+local tGetPlayerDataAsync = t.tuple(t.instanceIsA("Player"))
+function PlayerdataService:GetPlayerdataAsync(player: Player): {}?
+	assert(tGetPlayerDataAsync(player))
+
+	local success: boolean, data: ANY_TABLE = self:PromisePlayerdata(player):await()
+	if success then
+		return data
+	else
+		warn(string.format("Could not get playerdata for %s", player.Name))
+		return nil
+	end
+end
+
+function PlayerdataService:GetPlayerReplica(player: Player): {}?
+	t.instanceIsA("Player")
+	if self._playerdata[player] then
+		return self._playerdata[player]._playerReplica
+	end
+end
+
+local tSetPlayerData = t.tuple(t.instanceIsA("Player"), t.string, t.optional(t.any))
+function PlayerdataService:SetPlayerData(Player: Player, Key: string, Value: any?): ()
+	assert(tSetPlayerData(Player, Key, Value))
+	if self._playerdata[Player] and self._playerdata[Player]._profile then
+		if self._playerdata[Player]._profile.Data[Key] then
+			self._playerdata[Player]._profile.Data[Key] = Value
+			if self._playerdata[Player]._playerReplica then
+				self._playerdata[Player]._playerReplica:SetValue(Key, Value)
+			end
+		end
+	end
+end
+
+local tIncrementPlayerData = t.tuple(t.instanceIsA("Player"), t.string, t.number)
+function PlayerdataService:IncrementPlayerData(Player: Player, Key: string, Amount: number): ()
+	assert(tIncrementPlayerData(Player, Key, Amount))
+
+	if self._playerdata[Player] and self._playerdata[Player]._profile then
+		if
+			self._playerdata[Player]._profile.Data[Key]
+			and typeof(self._playerdata[Player]._profile.Data[Key]) == "number"
+		then
+			self._playerdata[Player]._profile.Data[Key] += Amount
+			if self._playerdata[Player]._playerReplica then
+				self._playerdata[Player]._playerReplica:SetValue(Key, self._playerdata[Player]._profile.Data[Key])
+			end
+		end
+	end
+end
+
+function PlayerdataService:AddData(Player: Player, Path: string, Value: any)
+	if self._playerdata[Player] and self._playerdata[Player]._profile then
+		if self._playerdata[Player]._profile.Data[Path] then
+			local success, data = InventoryHelper.AddToInventory(self._playerdata[Player]._profile.Data[Path], Value)
+			-- print(success, self._playerdata[Player]._profile.Data)
+			if success then
+				if self._playerdata[Player]._playerReplica then
+					self._playerdata[Player]._playerReplica:Write(Path .. "Add", data.GUID, data)
+					return success, data
+				end
+			end
+		end
+	end
+end
+
+function PlayerdataService:RemoveData(Player: Player, Path: string, Value: any)
+	if self._playerdata[Player] and self._playerdata[Player]._profile then
+		if self._playerdata[Player]._profile.Data[Path] then
+			if self._playerdata[Player]._profile.Data[Path][Value] then
+				self._playerdata[Player]._profile.Data[Path][Value] = nil
+				if self._playerdata[Player]._playerReplica then
+					self._playerdata[Player]._playerReplica:Write(Path .. "Remove", Value)
+				end
+			end
+		end
+	end
+end
+
+function PlayerdataService:AddRedeemedCode(player: Player, code: string, delay: number?)
+	if not (self._playerdata[player] and self._playerdata[player]._profile) then
+		return
+	end
+	
+	if not (self._playerdata[player]._profile.Data.RedeemedCodes) then
+		return
+	end
+
+	if not (self._playerdata[player]._playerReplica) then
+		return
+	end
+
+	if type(delay) == "number" then -- if it is not a number, it is a boolean "true" as a permanent delay
+		delay = os.time() + delay
+	end
+
+	self._playerdata[player]._playerReplica:Write("CodeSet", code, delay)
+
+	return true
+end
+
+function PlayerdataService:UpdateEntry(Player: Player, Path: string, Id: string, callback)
+	if self._playerdata[Player] and self._playerdata[Player]._profile then
+		if self._playerdata[Player]._profile.Data[Path] then
+			-- local entry = InventoryHelper.GetInventoryEntryByGUID(self._playerdata[Player]._profile.Data[Path], Id)
+			local entry = self._playerdata[Player]._profile.Data[Path][Id]
+			if entry then
+				local data = callback(entry)
+				if data then
+					self._playerdata[Player]._profile.Data[Path][Id] = data
+					if self._playerdata[Player]._playerReplica then
+						self._playerdata[Player]._playerReplica:Write(Path .. "Update", Id, data)
+					end
+					return true, data
+				end
+			end
+		end
+	end
+end
+
+function PlayerdataService:ReplicateTableIndex(Player: Player, Key: string, value)
+	if self._playerdata[Player] and self._playerdata[Player]._profile then
+		if self._playerdata[Player]._playerReplica then
+			self._playerdata[Player]._playerReplica:Write("AddPet", value.GUID, value)
+		end
+	end
+end
+				
 --[=[
 	Initialize PlayerdataService
 	@server

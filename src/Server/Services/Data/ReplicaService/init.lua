@@ -9,8 +9,8 @@ Description: Replica knit service
 ]=]
 
 --GetService calls
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players: Players = game:GetService("Players")
+local ReplicatedStorage: ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 --Types
 local Types = require(ReplicatedStorage.Shared.Modules.Data.Types)
@@ -19,9 +19,18 @@ type ANY_TABLE = Types.ANY_TABLE
 type REPLICA = Types.Replica
 type REPLICA_PARAMS = Types.ReplicaParams
 
+-- Import
+local Import = require(ReplicatedStorage.Packages.Import)
+
 --Module imports (Require)
 local Knit: ANY_TABLE = require(ReplicatedStorage.Packages.Knit)
 local Replica: REPLICA = require(script.Replica)
+
+--Module imports (Require)
+local WriteLib = ReplicatedStorage.Shared.Functions.WriteLib
+local Promise: ANY_TABLE = Import("Packages/Promise")
+local Knit: ANY_TABLE = Import("Packages/Knit")
+local Replica: REPLICA = Import("Replica")
 
 local ReplicaService: ANY_TABLE = Knit.CreateService({
 	Name = "ReplicaService",
@@ -50,12 +59,14 @@ function ReplicaService:CreateReplica(
 	Body: ANY_TABLE
 ): REPLICA
 	local replicaParams: REPLICA_PARAMS = {
+		-- ClassToken = self._token,
 		Replication = Replication,
+		WriteLib = WriteLib,
 		Data = Body,
 		Tags = Tags,
 		ClassName = ClassName,
 	}
-
+	print(WriteLib)
 	return Replica.new(replicaParams):andThen(function(newReplica: ANY_TABLE)
 		if not newReplica then
 			warn("No new replica")
@@ -82,7 +93,9 @@ end
 --[=[
     Initialize ReplicaService
 ]=]
-function ReplicaService:KnitInit() end
+function ReplicaService:KnitInit(): ()
+	self._token = Replica.NewClassToken("Playerdata")
+end
 
 --[=[
     Start ReplicaService

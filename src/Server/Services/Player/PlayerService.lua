@@ -9,13 +9,18 @@ Description: Basic boilerplate player service (Manages behavior w/players joinin
 ]=]
 
 --GetService calls
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players: Players = game:GetService("Players")
+local ReplicatedStorage: ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Types = require(ReplicatedStorage.Shared.Modules.Data.Types)
 type ANY_TABLE = Types.ANY_TABLE
+
+-- Import
+local Import = require(ReplicatedStorage.Packages.Import)
+
 --Module imports (Require)
 local Knit: ANY_TABLE = require(ReplicatedStorage.Packages.Knit)
+local Knit: ANY_TABLE = Import("Packages/Knit")
 
 local PlayerdataService: ANY_TABLE
 local PlayerService: ANY_TABLE = Knit.CreateService({
@@ -30,7 +35,7 @@ local PlayerService: ANY_TABLE = Knit.CreateService({
     @return nil
 ]=]
 function PlayerService._playerAdded(Player: Player): nil
-	PlayerdataService:GetPlayerdata(Player)
+	PlayerdataService:PromisePlayerdata(Player)
 		:andThen(function(Data: ANY_TABLE)
 			print("Playerdata successfully loaded ", Data)
 		end)
